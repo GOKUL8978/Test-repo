@@ -31,12 +31,22 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .cr{color:var(--cr)}.dr{color:var(--dr)}
 .acct h3{margin:0 0 8px;font-size:15px}
 .acct{margin-bottom:14px}
+[hidden]{display:none!important}
+.tabs{display:flex;gap:6px;margin-bottom:14px}.tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+label.f{display:block;font-size:12px;color:var(--muted)}
+input,select{width:100%;margin-top:2px;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:7px 8px;font:inherit}
+.txr{display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 2fr auto;gap:6px;align-items:end;margin-top:8px}
+.ah{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.ah h3{margin:0;font-size:15px}
+#gaccts .card{margin-bottom:12px}
+@media(max-width:760px){.txr{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
 <main>
 <h1>BAI2 to Excel Converter</h1>
-<p class="sub">Paste a BAI2 statement, review the accounts and transactions, then download everything as an Excel workbook.</p>
+<p class="sub">Parse a BAI2 statement into tables and Excel, or generate a BAI2 file from account, code, amount and comment inputs.</p>
+<div class="tabs"><button class="on" data-tab="parse">Parse BAI2 → Excel</button><button data-tab="gen">Generate BAI2</button></div>
+<section id="pane-parse">
 <div class="card">
 <textarea id="in" spellcheck="false" placeholder="Paste BAI2 file content here…"></textarea>
 <div class="row">
@@ -48,6 +58,20 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 </div>
 </div>
 <div id="out"></div>
+</section>
+<section id="pane-gen" hidden>
+<div class="card"><div class="grid">
+<label class="f">Sender ID<input id="g_s" value="SENDERID"></label>
+<label class="f">Receiver ID<input id="g_r" value="RECEIVERID"></label>
+<label class="f">Currency<input id="g_c" value="AUD" maxlength="3"></label>
+<label class="f">Statement date<input id="g_d" type="date"></label></div></div>
+<h2>Accounts and transactions</h2>
+<div id="gaccts"></div>
+<div class="row"><button id="addAcct">+ Add account</button><button class="primary" id="gen">Generate BAI2</button><span id="gmsg"></span></div>
+<h2>BAI2 output</h2>
+<div class="card"><textarea id="gout" readonly placeholder="Generated BAI2 appears here…"></textarea>
+<div class="row"><button id="gcopy">Copy</button><button id="gdl">Download .bai</button><button id="gparse">Open in parser</button></div></div>
+</section>
 </main>
 <script>
 var CODES={"010":"Opening Balance","015":"Closing Balance","045":"Available Closing Balance","100":"Total Credits","400":"Total Debits",
@@ -66,7 +90,7 @@ function parse(text){
   lines.forEach(function(l){
     if(/^88,/.test(l)&&recs.length){
       var p=recs[recs.length-1],c=l.slice(3);
-      if(/\/$/.test(p)){p=p.slice(0,-1)+","+c}else{p=p+" "+c}
+      if(/\/$/.test(p)){p=p.slice(0,-1);if(!(/^03,/.test(p)&&/,$/.test(p)))p+=",";p+=c}else{p=p+" "+c}
       recs[recs.length-1]=p;
     }else recs.push(l);
   });
@@ -77,7 +101,8 @@ function parse(text){
     else if(c==="02")R.group={receiver:f[1],originator:f[2],status:f[3],asOf:fmtDate(f[4]),currency:f[6],modifier:f[7]};
     else if(c==="03"){
       acc={number:f[1],currency:f[2],opening:null,closing:null,available:null,credits:null,creditCount:null,debits:null,debitCount:null,control:null,records:null,tx:[]};
-      for(var i=3;i+1<f.length;i+=4){
+      for(var i=3;i<f.length;i+=4){
+        while(i<f.length&&f[i]==="")i++;if(i+1>=f.length)break;
         var t=f[i],a=amt(f[i+1]),n=f[i+2]===""||f[i+2]==null?null:Number(f[i+2]);
         if(t==="010")acc.opening=a;else if(t==="015")acc.closing=a;else if(t==="045")acc.available=a;
         else if(t==="100"){acc.credits=a;acc.creditCount=n}else if(t==="400"){acc.debits=a;acc.debitCount=n}
@@ -120,8 +145,29 @@ function sheet(rows,widths,numCols){
   var ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=widths.map(function(w){return{wch:w}});numFmt(ws,numCols||[]);
   ws["!freeze"]={xSplit:0,ySplit:1};return ws;
 }
+function summarySheet(R){
+  var N=function(n){return n==null?"":{v:n,t:"n",z:"#,##0.00;[Red]-#,##0.00"}};
+  var rows=[["BAI2 PARSED SUMMARY"],[],["FILE AND GROUP"],
+   ["Sender ID",R.file.sender,"Receiver ID",R.file.receiver],
+   ["Created",(R.file.date||"")+" "+(R.file.time||""),"BAI version",R.file.version],
+   ["Originator",R.group.originator,"Ultimate receiver",R.group.receiver],
+   ["As-of date",R.group.asOf,"Currency",R.group.currency],
+   ["Accounts",R.gt.accounts||R.accounts.length,"Group control total",N(R.gt.total)],[],
+   ["ACCOUNTS SUMMARY"],["Account","Cur","Opening","Closing","Available","Credits","Debits","Txns"]];
+  R.accounts.forEach(function(a){rows.push([a.number,a.currency,N(a.opening),N(a.closing),N(a.available),N(a.credits),N(a.debits),a.tx.length])});
+  rows.push([]);
+  R.accounts.forEach(function(a){
+    rows.push(["TRANSACTIONS - "+a.number+" ("+a.currency+")"]);
+    rows.push(["#","Code","Type","Dir","Amount","Bank ref","Customer ref","Narrative"]);
+    if(!a.tx.length)rows.push(["No transaction records"]);
+    a.tx.forEach(function(t,i){rows.push([i+1,t.code,t.desc,t.dir,N(t.amount),t.bankRef,t.custRef,t.text])});
+    rows.push([]);
+  });
+  var ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[20,14,30,14,16,18,20,44].map(function(w){return{wch:w}});return ws;
+}
 function build(R){
   var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,summarySheet(R),"Summary");
   var s=[["Section","Field","Value"],
    ["File","Sender ID",R.file.sender],["File","Receiver ID",R.file.receiver],["File","Created",(R.file.date||"")+" "+(R.file.time||"")],["File","File ID",R.file.fileId],["File","Record length",R.file.recLen],["File","BAI version",R.file.version],
    ["Group","Originator",R.group.originator],["Group","Ultimate receiver",R.group.receiver],["Group","Status",R.group.status],["Group","As-of date",R.group.asOf],["Group","Currency",R.group.currency],
@@ -139,7 +185,7 @@ function build(R){
     var rows=[["#","Type code","Type description","Direction","Amount","Signed amount","Funds type","Bank reference","Customer reference","Narrative"]];
     x.tx.forEach(function(t,i){rows.push([i+1,t.code,t.desc,t.dir,t.amount,t.signed,t.funds,t.bankRef,t.custRef,t.text])});
     var n=String(x.number).replace(/[\\\/?*\[\]:]/g,"").slice(-28)||"Account",b=n,k=1;
-    while(used[n]||["File Summary","Accounts","All Transactions"].indexOf(n)>-1)n=b.slice(0,26)+"_"+(k++);
+    while(used[n]||["Summary","File Summary","Accounts","All Transactions"].indexOf(n)>-1)n=b.slice(0,26)+"_"+(k++);
     used[n]=1;XLSX.utils.book_append_sheet(wb,sheet(rows,[6,10,34,10,16,16,10,18,20,50],[4,5]),n);
   });
   return wb;
@@ -157,6 +203,71 @@ $("dl").onclick=function(){
   try{XLSX.writeFile(build(D),"BAI2_Statement.xlsx");msg("Workbook downloaded.")}
   catch(e){msg("Download failed: "+((e&&e.message)||e),true)}
 };
+
+/* ---- Tabs ---- */
+document.querySelectorAll(".tabs button").forEach(function(b){b.onclick=function(){
+  document.querySelectorAll(".tabs button").forEach(function(x){x.classList.toggle("on",x===b)});
+  $("pane-parse").hidden=b.dataset.tab!=="parse";$("pane-gen").hidden=b.dataset.tab!=="gen"}});
+
+/* ---- BAI2 generator ---- */
+var G={accts:[]},NOTX={"010":1,"015":1,"045":1,"100":1,"400":1};
+function newTx(){return{code:"195",amt:"",bref:"",cref:"",text:""}}
+function newAcct(){return{num:"",open:"0",close:"",tx:[newTx()]}}
+function codeList(){return Object.keys(CODES).filter(function(c){return !NOTX[c]}).sort().map(function(c){
+  return '<option value="'+c+'">'+esc(CODES[c])+" ("+(+c<400?"Credit":"Debit")+")</option>"}).join("")}
+$("g_d").insertAdjacentHTML("afterend",'<datalist id="bai-codes">'+codeList()+"</datalist>");
+function renderG(){
+  $("gaccts").innerHTML=G.accts.map(function(a,i){
+    var h='<div class="card"><div class="ah"><h3>Account '+(i+1)+'</h3>'+(G.accts.length>1?'<button data-act="rmA" data-a="'+i+'">Remove</button>':"")+'</div><div class="grid">'+
+     '<label class="f">Account number<input data-a="'+i+'" data-f="num" value="'+esc(a.num)+'"></label>'+
+     '<label class="f">Opening balance<input data-a="'+i+'" data-f="open" inputmode="decimal" value="'+esc(a.open)+'"></label>'+
+     '<label class="f">Closing balance (blank = auto)<input data-a="'+i+'" data-f="close" inputmode="decimal" value="'+esc(a.close)+'"></label></div>';
+    a.tx.forEach(function(t,j){
+      h+='<div class="txr"><label class="f">BAI code<input list="bai-codes" data-a="'+i+'" data-t="'+j+'" data-f="code" inputmode="numeric" maxlength="3" placeholder="e.g. 195" value="'+esc(t.code)+'"></label>'+
+      '<label class="f">Amount<input data-a="'+i+'" data-t="'+j+'" data-f="amt" inputmode="decimal" placeholder="0.00" value="'+esc(t.amt)+'"></label>'+
+      '<label class="f">Bank ref<input data-a="'+i+'" data-t="'+j+'" data-f="bref" placeholder="auto" value="'+esc(t.bref)+'"></label>'+
+      '<label class="f">Customer ref<input data-a="'+i+'" data-t="'+j+'" data-f="cref" value="'+esc(t.cref)+'"></label>'+
+      '<label class="f">Comments<input data-a="'+i+'" data-t="'+j+'" data-f="text" value="'+esc(t.text)+'"></label>'+
+      '<button data-act="rmT" data-a="'+i+'" data-t="'+j+'" title="Remove">✕</button></div>'});
+    return h+'<div class="row"><button data-act="addT" data-a="'+i+'">+ Add transaction</button></div></div>'}).join("");
+}
+$("gaccts").addEventListener("input",function(e){var d=e.target.dataset;if(d.a==null||!d.f)return;var a=G.accts[+d.a];if(d.t!=null)a.tx[+d.t][d.f]=e.target.value;else a[d.f]=e.target.value});
+$("gaccts").addEventListener("click",function(e){var b=e.target.closest("button[data-act]");if(!b)return;var d=b.dataset,a=G.accts[+d.a];
+  if(d.act==="addT")a.tx.push(newTx());else if(d.act==="rmT")a.tx.splice(+d.t,1);else if(d.act==="rmA")G.accts.splice(+d.a,1);renderG()});
+$("addAcct").onclick=function(){G.accts.push(newAcct());renderG()};
+function cents(v){var n=parseFloat(String(v==null?"":v).replace(/,/g,""));return isNaN(n)?0:Math.round(n*100)}
+function cl(t){return String(t||"").replace(/[,\/\r\n]+/g," ").trim()}
+function genBai(){
+  var s=cl($("g_s").value)||"SENDER",r=cl($("g_r").value)||"RECEIVER",cur=(cl($("g_c").value)||"AUD").toUpperCase(),
+   dv=$("g_d").value||new Date().toISOString().slice(0,10),ymd=dv.slice(2,4)+dv.slice(5,7)+dv.slice(8,10),
+   n=new Date(),hm=("0"+n.getHours()).slice(-2)+("0"+n.getMinutes()).slice(-2),seq=0,body=[],gTot=0,total=0;
+  G.accts.forEach(function(a,i){
+    var num=cl(a.num);if(!num)throw new Error("Account "+(i+1)+": account number is required.");
+    var cr=0,dr=0,nc=0,nd=0,tl=[];
+    a.tx.forEach(function(t){
+      var amt=Math.abs(cents(t.amt));if(!amt)return;
+      var code=String(t.code).trim();
+      if(!/^\d{3}$/.test(code)||+code<100||+code>699)throw new Error("Account "+(i+1)+": BAI code must be 3 digits between 100 and 699 (got \""+code+"\").");
+      if(+code<400){cr+=amt;nc++}else{dr+=amt;nd++}
+      seq++;tl.push("16,"+code+","+amt+",Z,"+(cl(t.bref)||String(1000000000+seq))+","+cl(t.cref)+"/");
+      var tx=String(t.text||"").replace(/[\r\n]+/g," ").replace(/\/+$/,"").trim();if(tx)tl.push("88,"+tx);total++;
+    });
+    var open=cents(a.open),close=String(a.close).trim()!==""?cents(a.close):open+cr-dr,
+     L=["03,"+num+","+cur+",010,"+open+",,,015,"+close+",,,/","88,100,"+cr+","+nc+",,400,"+dr+","+nd+",/"].concat(tl),
+     ctl=open+close+2*(cr+dr);
+    L.push("49,"+ctl+","+(L.length+1)+"/");gTot+=ctl;body=body.concat(L);
+  });
+  if(!total)throw new Error("Enter at least one transaction with an amount.");
+  var out=["01,"+s+","+r+","+ymd+","+hm+",01,080,,2/","02,"+r+","+s+",1,"+ymd+",,"+cur+",2/"].concat(body,["98,"+gTot+","+G.accts.length+","+(body.length+2)+"/"]);
+  out.push("99,"+gTot+",1,"+(out.length+1)+"/");
+  return out.join("\n");
+}
+function gmsg(t,e){$("gmsg").textContent=t;$("gmsg").className=e?"err":""}
+$("gen").onclick=function(){try{$("gout").value=genBai();gmsg("Generated.")}catch(e){gmsg(e.message,true)}};
+$("gcopy").onclick=function(){var o=$("gout");if(!o.value)return;try{navigator.clipboard.writeText(o.value).then(function(){gmsg("Copied.")})}catch(e){o.select();document.execCommand("copy");gmsg("Copied.")}};
+$("gdl").onclick=function(){var v=$("gout").value;if(!v)return;var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([v+"\n"],{type:"text/plain"}));a.download="statement.bai";document.body.appendChild(a);a.click();a.remove()};
+$("gparse").onclick=function(){var v=$("gout").value;if(!v)return;$("in").value=v;document.querySelector('[data-tab="parse"]').click();$("parse").click()};
+$("g_d").value=new Date().toISOString().slice(0,10);G.accts=[newAcct()];renderG();
 </script>
 </body>
 </html>
