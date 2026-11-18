@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Payment Import File Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f4ee;--card:#fff;--ink:#101826;--steel:#28405e;--teal:#2fb8a0;--line:#dcd6c6;--input:#fffef9;--muted:#666;--danger:#c04b3f;--led:#0c1420;--ledt:#8fe3c8;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);font-family:'Segoe UI',system-ui,Helvetica,Arial,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1620;--card:#18222f;--ink:#e8edf3;--steel:#9fc0e6;--line:#2c3a4c;--input:#111a25;--muted:#98a6b8;--danger:#ef7d70}}
+:root[data-theme="dark"]{--bg:#0f1620;--card:#18222f;--ink:#e8edf3;--steel:#9fc0e6;--line:#2c3a4c;--input:#111a25;--muted:#98a6b8;--danger:#ef7d70}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:14px}
+header{background:#101826;color:#eef1f5;padding:20px 24px 16px;border-bottom:3px solid var(--teal)}
+header h1{margin:0 0 4px;font-size:20px}header p{margin:0;color:#9fb0c4;font-size:12.5px}
+.tabs{display:flex;background:#28405e;padding:0 24px}
+.tab{padding:11px 18px;color:#cfe0f0;cursor:pointer;font-weight:600;font-size:13px;border-bottom:3px solid transparent}
+.tab.active{background:var(--bg);color:var(--ink);border-bottom-color:var(--teal)}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 24px 60px}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:3px;padding:16px 18px;margin-bottom:16px}
+.card h2{margin:0 0 4px;font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--steel)}
+.sub{margin:0 0 12px;color:var(--muted);font-size:12.5px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px 14px}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:11.5px;font-weight:600}
+input,select,textarea{border:1px solid var(--line);border-radius:3px;padding:6px 8px;font:inherit;font-size:13px;background:var(--input);color:var(--ink)}
+textarea{width:100%;min-height:150px;font-family:Consolas,Menlo,monospace;font-size:12.5px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--teal);outline-offset:-1px}
+button{font:inherit;font-size:13px;font-weight:600;padding:8px 14px;border-radius:3px;border:1px solid var(--steel);background:var(--card);color:var(--steel);cursor:pointer}
+button.primary{background:#28405e;color:#fff;border-color:#28405e}
+button.accent{background:var(--teal);border-color:var(--teal);color:#06231d}
+button.danger{border-color:var(--danger);color:var(--danger)}
+button.small{padding:4px 9px;font-size:11.5px}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.two{grid-template-columns:1fr}}
+.scroll{overflow-x:auto;margin-top:10px}
+table{border-collapse:collapse;font-size:12.5px}
+th{background:rgba(127,127,100,.15);padding:6px 8px;border:1px solid var(--line);font-size:11px;text-transform:uppercase;text-align:left;white-space:nowrap}
+td{padding:3px;border:1px solid var(--line)}
+td input{width:140px;border-color:transparent}
+.empty{color:var(--muted);font-style:italic;padding:8px 0}
+.errbox{background:#fdf1ef;border:1px solid #c04b3f;color:#7a2b21;border-radius:3px;padding:10px 14px;margin-top:12px;font-size:12.5px}
+.ledger{background:var(--led);border-radius:3px;padding:14px 16px;border:1px solid #1c2a3d}
+.lhead{color:#4c6a63;font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;display:flex;justify-content:space-between}
+pre{margin:0;font-family:Consolas,Menlo,monospace;font-size:12px;color:var(--ledt);white-space:pre;overflow:auto;max-height:420px;line-height:1.55}
+.ln{color:#4c6a63;display:inline-block;width:34px;user-select:none}
+.fn{background:#0e1b2b;color:#cfe0f0;border:1px solid #2c4258;min-width:240px}
+.chip{display:inline-block;background:rgba(47,184,160,.18);border-radius:10px;padding:1px 8px;font-size:11px;margin:2px 3px 0 0}
+</style>
+</head>
+<body>
+<header><h1>Payment Import File Generator</h1>
+<p>Paste your own field list (one field per line) for ACH and Wire user-defined files &mdash; the layout, entry grid and output file follow your list, in your order.</p></header>
+<div class="tabs"><div class="tab active" data-tab="nacha">ACH &middot; NACHA</div><div class="tab" data-tab="ach">ACH &middot; User-Defined</div><div class="tab" data-tab="wire">Wire &middot; User-Defined</div></div>
+
+<div class="wrap">
+<!-- NACHA -->
+<div class="panel active" id="panel-nacha">
+  <div class="card"><h2>File Header (Type 1)</h2><p class="sub">One per file, shared by all batches. NACHA is fixed-width: 94 characters per line.</p><div class="grid" id="nacha-file"></div></div>
+  <div class="card"><h2>Batches</h2><p class="sub">Each batch has its own Batch Header (5), Entry Detail (6), Addenda (7) and Batch Control (8) records.</p><div id="nacha-batches"></div><div class="btnrow"><button class="accent" onclick="addNB()">+ Add batch</button></div></div>
+  <div class="btnrow"><button class="primary" onclick="genNacha()">Generate NACHA file</button></div>
+</div>
+
+<!-- ACH -->
+<div class="panel" id="panel-ach">
+  <div class="card"><h2>Profile</h2>
+    <div class="grid">
+      <div class="field"><label>Payment Type</label><select id="ach-type"><option>CCD</option><option>PPD</option><option>CTX</option><option>CHILD</option><option>RCK</option><option>TEL</option><option>TAX</option></select></div>
+      <div class="field"><label>Delimiter</label><select id="ach-delim"><option value=",">, Comma</option><option value="*">* Asterisk</option><option value="\">\ Back slash</option><option value="/">/ Forward slash</option><option value=":">: Colon</option><option value="|">| Bar</option><option value="'">' Single quote</option></select></div>
+      <div class="field"><label>Include record-type letter (P / R) first</label><select id="ach-prefix"><option value="1">Yes</option><option value="0">No</option></select></div>
+      <div class="field"><label>Include payment type after P</label><select id="ach-incltype"><option value="1">Yes</option><option value="0">No</option></select></div>
+    </div>
+  </div>
+  <div class="two">
+    <div class="card"><h2>Payment (P) record fields</h2><p class="sub">One field name per line, e.g. Company Entry Description, Effective Date&hellip;</p>
+      <textarea id="ach-p-list" placeholder="Company Entry Description&#10;Effective Date&#10;Originating Account Number&#10;Originating ACH Company ID"></textarea>
+      <div class="btnrow"><button class="accent" onclick="G.ach_p.apply()">Apply field list</button></div></div>
+    <div class="card"><h2>Recipient (R) record fields</h2><p class="sub">One field name per line, e.g. Recipient ID, Bank ID Type&hellip;</p>
+      <textarea id="ach-r-list" placeholder="Recipient Name&#10;Recipient Account Number&#10;Recipient Bank ID&#10;Recipient ID&#10;Recipient Amount"></textarea>
+      <div class="btnrow"><button class="accent" onclick="G.ach_r.apply()">Apply field list</button></div></div>
+  </div>
+  <div class="card"><h2>Payment (P) rows</h2><p class="sub">Each row is one payment, numbered in order (1, 2, 3&hellip;).</p><div id="ach-p-grid"></div></div>
+  <div class="card"><h2>Recipient (R) rows</h2><p class="sub">Set "Payment #" to attach a recipient to a payment above. Recipients are written right after their payment.</p><div id="ach-r-grid"></div></div>
+  <div class="btnrow"><button class="primary" onclick="genAch()">Generate ACH user-defined file</button></div>
+</div>
+
+<!-- WIRE -->
+<div class="panel" id="panel-wire">
+  <div class="card"><h2>Profile</h2>
+    <p class="sub">Per the User Guide, a Wire user-defined file has no header or trailer record, is comma-delimited, and holds a single payment type. Only the fields in your list are written, in your order.</p>
+    <div class="grid">
+      <div class="field"><label>Payment Type (one per file)</label><select id="wire-type"><option>FW</option><option>FX</option><option>DD</option><option>TP</option><option>AT</option></select></div>
+      <div class="field"><label>First line = field names?</label><select id="wire-hdrrow"><option value="0">No (data rows only)</option><option value="1">Yes (1 header row to ignore)</option></select></div>
+    </div>
+  </div>
+  <div class="card"><h2>Payment fields</h2><p class="sub">One field name per line, e.g. Sender's Reference Number, Value Date, Beneficiary Bank ID Type&hellip;</p>
+    <textarea id="wire-list" placeholder="Sender's Reference Number&#10;Value Date&#10;Debit Account #&#10;Debit Amount&#10;Beneficiary Name&#10;Beneficiary Bank ID Type&#10;Beneficiary Bank ID"></textarea>
+    <div class="btnrow"><button class="accent" onclick="G.wire.apply()">Apply field list</button></div></div>
+  <div class="card"><h2>Payment rows</h2><div id="wire-grid"></div></div>
+  <div class="btnrow"><button class="primary" onclick="genWire()">Generate Wire CSV file</button></div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="ledger"><div class="lhead"><span>Generated File Preview</span><span id="meta">&mdash;</span></div>
+  <pre id="out">No file generated yet.</pre></div>
+  <div class="btnrow"><input class="fn" id="fname" value="payment_import.txt"><button class="accent" onclick="dl()">Download file</button><button onclick="cp()">Copy to clipboard</button></div>
+  <div id="err"></div>
+</div>
+</div>
+
+<input type="file" id="impFile" accept=".xlsx,.xls,.csv" style="display:none">
+
+<script>
+function el(t,a,c){const e=document.createElement(t);for(const k in a||{}){if(k==='class')e.className=a[k];else e.setAttribute(k,a[k]);}(c||[]).forEach(x=>e.appendChild(typeof x==='string'?document.createTextNode(x):x));return e}
+const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function parseList(t){return t.split(/\r?\n/).map(s=>s.trim()).filter(Boolean)}
+
+/* ---- Generic grid: fields from a pasted list, rows of values ---- */
+function Grid(hostId,listId,opts){
+  opts=opts||{};
+  const g={fields:[],rows:[],extra:opts.extra||null,host:document.getElementById(hostId),list:document.getElementById(listId)};
+  g.apply=function(){
+    const newF=parseList(g.list.value);
+    if(!newF.length){fail('Enter at least one field name (one per line).');return}
+    clr();
+    const old=g.fields;
+    g.rows=g.rows.map(r=>{const n={};if(g.extra)n[g.extra.key]=r[g.extra.key];newF.forEach(f=>{n[f]=r[f]||''});return n});
+    g.fields=newF;
+    if(!g.rows.length)g.add();
+    g.render();if(opts.onApply)opts.onApply(g);
+  };
+  g.add=function(){const r={};if(g.extra)r[g.extra.key]=g.extra.def;g.fields.forEach(f=>r[f]='');g.rows.push(r);};
+  g.render=function(){
+    const h=g.host;h.innerHTML='';
+    if(!g.fields.length){h.appendChild(el('div',{class:'empty'},['Paste a field list above and click "Apply field list".']));return}
+    const chips=el('div',{});g.fields.forEach((f,i)=>chips.appendChild(el('span',{class:'chip'},[(i+1)+'. '+f])));h.appendChild(chips);
+    const cols=(g.extra?[g.extra.label]:[]).concat(g.fields);
+    const t=el('table',{});const hr=el('tr',{});hr.appendChild(el('th',{},['#']));cols.forEach(c=>hr.appendChild(el('th',{},[c])));hr.appendChild(el('th',{},['']));t.appendChild(hr);
+    g.rows.forEach((r,i)=>{
+      const tr=el('tr',{});tr.appendChild(el('td',{style:'text-align:center;padding:3px 8px'},[String(i+1)]));
+      cols.forEach((c,ci)=>{const key=(g.extra&&ci===0)?g.extra.key:c;const inp=el('input',{type:'text'});inp.value=r[key]||'';inp.addEventListener('input',()=>{r[key]=inp.value});tr.appendChild(el('td',{},[inp]))});
+      const rm=el('button',{class:'danger small'},['Remove']);rm.addEventListener('click',()=>{g.rows.splice(i,1);g.render()});tr.appendChild(el('td',{},[rm]));t.appendChild(tr);
+    });
+    const sc=el('div',{class:'scroll'},[t]);h.appendChild(sc);
+    const br=el('div',{class:'btnrow'});
+    const add=el('button',{class:'small'},['+ Add row']);add.addEventListener('click',()=>{g.add();g.render()});
+    const imp=el('button',{class:'small'},['Import from Excel/CSV']);imp.addEventListener('click',()=>importInto(g));
+    const clear=el('button',{class:'small danger'},['Clear rows']);clear.addEventListener('click',()=>{g.rows=[];g.add();g.render()});
+    br.appendChild(add);br.appendChild(imp);br.appendChild(clear);h.appendChild(br);
+  };
+  return g;
+}
+function importInto(g){
+  const f=document.getElementById('impFile');f.value='';
+  f.onchange=function(e){
+    const file=e.target.files[0];if(!file)return;
+    const rd=new FileReader();
+    rd.onload=ev=>{try{
+      const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      if(!rows.length)throw new Error('The file has no data rows.');
+      const heads=Object.keys(rows[0]);
+      const cols=(g.extra?[{key:g.extra.key,label:g.extra.label}]:[]).concat(g.fields.map(f=>({key:f,label:f})));
+      const map={};cols.forEach(c=>{const m=heads.find(h=>norm(h)===norm(c.label));if(m)map[c.key]=m});
+      const matched=Object.keys(map).length;
+      // positional fallback if no header matches
+      const usePos=matched===0;
+      const fieldsOnly=g.fields;
+      if(g.rows.length===1&&g.fields.every(k=>!g.rows[0][k]))g.rows=[];
+      rows.forEach(r=>{const n={};if(g.extra)n[g.extra.key]=(map[g.extra.key]&&r[map[g.extra.key]])||g.extra.def;
+        fieldsOnly.forEach((k,i)=>{n[k]=usePos?String(r[heads[i]]??''):(map[k]?String(r[map[k]]):'')});g.rows.push(n)});
+      g.render();clr();
+      if(usePos)fail('No column headers matched your field names, so columns were imported by position.');
+    }catch(err){fail('Could not read that file: '+err.message)}};
+    rd.readAsArrayBuffer(file);
+  };
+  f.click();
+}
+
+const G={
+  ach_p:Grid('ach-p-grid','ach-p-list'),
+  ach_r:Grid('ach-r-grid','ach-r-list',{extra:{key:'__pay',label:'Payment #',def:'1'}}),
+  wire:Grid('wire-grid','wire-list')
+};
+Object.values(G).forEach(g=>g.render());
+
+/* ---- Tabs ---- */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');document.getElementById('panel-'+t.dataset.tab).classList.add('active');
+}));
+
+/* ---- Output helpers ---- */
+let last='';
+function show(lines,meta){
+  last=lines.join('\r\n');
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  document.getElementById('out').innerHTML=lines.map((l,i)=>'<span class="ln">'+String(i+1).padStart(3,' ')+'</span>'+esc(l)).join('\n');
+  document.getElementById('meta').textContent=meta;
+}
+function fail(m){const e=document.getElementById('err');e.innerHTML='';e.appendChild(el('div',{class:'errbox'},[m]))}
+function clr(){document.getElementById('err').innerHTML=''}
+function dl(){if(!last){fail('Generate a file first.');return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([last],{type:'text/plain'}));a.download=document.getElementById('fname').value||'payment_import.txt';document.body.appendChild(a);a.click();document.body.removeChild(a)}
+function cp(){if(!last){fail('Generate a file first.');return}try{navigator.clipboard.writeText(last)}catch(e){fail('Copy is not available here; use Download instead.')}}
+const ymd=()=>{const d=new Date();return String(d.getFullYear()).slice(-2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')};
+const cents=v=>{v=String(v||'0').replace(/[^0-9.\-]/g,'')||'0';const n=Math.round(parseFloat(v)*100);return isNaN(n)?0:n};
+const joinF=(arr,d)=>arr.map(v=>{v=v==null?'':String(v);return d===','&&/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(d);
+
+/* ---- NACHA (fixed width) ---- */
+const pL=(s,n,c)=>{s=String(s==null?'':s);return s.length>=n?s.slice(0,n):c.repeat(n-s.length)+s};
+const pR=(s,n)=>{s=String(s==null?'':s);return s.length>=n?s.slice(0,n):s+' '.repeat(n-s.length)};
+const dig=s=>String(s||'').replace(/[^0-9]/g,'');
+const hm=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')};
+function abaCD(f8){const w=[3,7,1,3,7,1,3,7];let t=0;const d=dig(f8).padEnd(8,'0').slice(0,8);for(let i=0;i<8;i++)t+=(+d[i])*w[i];return String((10-t%10)%10)}
+function rt9(r){const d=dig(r);if(d.length>=9)return d.slice(0,9);if(d.length===8)return d+abaCD(d);return pL(d,9,'0')}
+const NF=[
+{key:'immDest',label:'Immediate Destination',max:10,req:1,help:'Receiving routing/transit no. (pos 04-13).'},
+{key:'immOrig',label:'Immediate Origin',max:10,req:1,help:'Originating routing/transit no. (pos 14-23).'},
+{key:'creationDate',label:'File Creation Date (YYMMDD)',max:6,def:ymd(),req:1},
+{key:'creationTime',label:'File Creation Time (HHMM)',max:4,def:hm()},
+{key:'idMod',label:'File ID Modifier (A-Z or 0-9)',max:1,def:'A',req:1},
+{key:'destName',label:'Immediate Destination Name',max:23},
+{key:'origName',label:'Immediate Origin Name',max:23},
+{key:'refCode',label:'Reference Code',max:8}];
+const NB=[
+{key:'sec',label:'Standard Entry Class Code',req:1,opts:[['CCD','CCD - Corporate Credit/Debit'],['PPD','PPD - Prearranged Payment/Deposit'],['CTX','CTX - Corporate Trade Exchange'],['TEL','TEL - Telephone-Initiated'],['RCK','RCK - Re-presented Check']]},
+{key:'svc',label:'Service Class Code',req:1,opts:[['200','200 - Mixed debit and credit'],['220','220 - Credit only'],['225','225 - Debit only']]},
+{key:'companyName',label:'Company Name',max:16,req:1},
+{key:'discData',label:'Company Discretionary Data',max:20},
+{key:'companyId',label:'Company Identification',max:10,req:1,help:'e.g. 1 + 9-digit EIN'},
+{key:'entryDesc',label:'Company Entry Description',max:10,req:1},
+{key:'descDate',label:'Company Descriptive Date',max:6},
+{key:'effDate',label:'Effective Entry Date (YYMMDD)',max:6,def:ymd(),req:1},
+{key:'originDfi',label:'Originating DFI Identification',max:8,req:1,help:'First 8 digits of the ODFI routing number.'},
+{key:'batchNumber',label:'Batch Number',max:7,req:1}];
+const TXN=[['','(auto from account type)']];
+[[2,'Checking'],[3,'Savings'],[4,'GL'],[5,'Loan']].forEach(a=>[[2,'credit'],[3,'prenote credit'],[4,'zero $ credit'],[7,'debit'],[8,'prenote debit'],[9,'zero $ debit']].forEach(c=>{if(a[0]===5&&c[0]>4)return;const code=''+a[0]+c[0];TXN.push([code,code+' '+a[1]+' '+c[1]])}));
+TXN.push(['55','55 Loan debit (reversal only)']);
+const DEBITS=['27','28','29','37','38','39','47','48','49','55'];
+const ACCT=['Checking','Savings','General Ledger','Loan'];
+function fieldsInto(host,schema,vals){schema.forEach(f=>{
+  if(vals[f.key]===undefined)vals[f.key]=f.def!==undefined?f.def:(f.opts?f.opts[0][0]:'');
+  const w=el('div',{class:'field'});w.appendChild(el('label',{},[f.label+(f.req?' *':'')]));
+  let i;if(f.opts){i=el('select',{});f.opts.forEach(o=>i.appendChild(el('option',{value:o[0]},[o[1]])))}else{i=el('input',{type:'text'});if(f.max)i.maxLength=f.max}
+  i.value=vals[f.key];i.addEventListener('input',()=>{vals[f.key]=i.value});i.addEventListener('change',()=>{vals[f.key]=i.value});
+  w.appendChild(i);if(f.help)w.appendChild(el('div',{style:'font-size:10.5px;color:var(--muted)'},[f.help]));host.appendChild(w)})}
+let nB=[],nBSeq=0,nRSeq=0;const nfVals={};
+fieldsInto(document.getElementById('nacha-file'),NF,nfVals);
+function addNB(){nB.push({id:++nBSeq,vals:{batchNumber:String(nB.length+1)},recs:[]});renderNB()}
+function impNB(b){const L=['Name','ID Number','Routing (9-digit)','Account Number','Account Type','Amount','Transaction Code','Addenda Text'];
+  const shim={fields:L,rows:[],extra:null,render:function(){shim.rows.forEach(r=>{if(!L.some(k=>r[k]))return;b.recs.push({id:++nRSeq,name:r[L[0]]||'',idNum:r[L[1]]||'',routing:r[L[2]]||'',account:r[L[3]]||'',acctType:ACCT.indexOf(r[L[4]])>=0?r[L[4]]:'Checking',amount:r[L[5]]||'0.00',txn:r[L[6]]||'',addenda:r[L[7]]||''})});shim.rows=[];renderNB()}};
+  importInto(shim)}
+function renderNB(){
+  const h=document.getElementById('nacha-batches');h.innerHTML='';
+  if(!nB.length){h.appendChild(el('div',{class:'empty'},['No batches yet. Click + Add batch.']));return}
+  nB.forEach((b,bi)=>{
+    const card=el('div',{style:'border:1px solid var(--line);border-radius:3px;padding:12px 14px;margin-bottom:12px'});
+    const hd=el('div',{style:'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px'},[el('strong',{},['Batch '+(bi+1)])]);
+    const rm=el('button',{class:'danger small'},['Remove batch']);rm.addEventListener('click',()=>{nB=nB.filter(x=>x.id!==b.id);renderNB()});hd.appendChild(rm);card.appendChild(hd);
+    const gr=el('div',{class:'grid'});fieldsInto(gr,NB,b.vals);card.appendChild(gr);
+    card.appendChild(el('div',{style:'margin:12px 0 4px;font-weight:700'},['Recipients ('+b.recs.length+')']));
+    if(!b.recs.length)card.appendChild(el('div',{class:'empty'},['No recipients in this batch yet.']));
+    else{
+      const t=el('table',{});t.appendChild(el('tr',{},['#','Name','ID Number','Routing (9-digit)','Account #','Acct Type','Amount','Txn Code','Addenda text (optional)',''].map(x=>el('th',{},[x]))));
+      b.recs.forEach((r,ri)=>{
+        const tr=el('tr',{});tr.appendChild(el('td',{style:'text-align:center;padding:3px 8px'},[String(ri+1)]));
+        const mk=(k,ph,w)=>{const i=el('input',{type:'text',placeholder:ph,style:'width:'+w+'px'});i.value=r[k]||'';i.addEventListener('input',()=>{r[k]=i.value});tr.appendChild(el('td',{},[i]))};
+        const mkSel=(k,list)=>{const s=el('select',{});list.forEach(o=>{const v=Array.isArray(o)?o[0]:o,l=Array.isArray(o)?o[1]:o;s.appendChild(el('option',{value:v},[l]))});s.value=r[k]||list[0][0]||list[0];s.addEventListener('change',()=>{r[k]=s.value});tr.appendChild(el('td',{},[s]))};
+        mk('name','Recipient name',140);mk('idNum','ID #',90);mk('routing','9 digits',100);mk('account','Account #',120);
+        mkSel('acctType',ACCT);mk('amount','0.00',80);mkSel('txn',TXN);mk('addenda','Optional note / remittance text',220);
+        const x=el('button',{class:'danger small'},['Remove']);x.addEventListener('click',()=>{b.recs=b.recs.filter(q=>q.id!==r.id);renderNB()});tr.appendChild(el('td',{},[x]));t.appendChild(tr)});
+      card.appendChild(el('div',{class:'scroll'},[t]))}
+    const br=el('div',{class:'btnrow'});
+    const a=el('button',{class:'small'},['+ Add recipient']);a.addEventListener('click',()=>{b.recs.push({id:++nRSeq,name:'',idNum:'',routing:'',account:'',acctType:'Checking',amount:'0.00',txn:'',addenda:''});renderNB()});
+    const im=el('button',{class:'small'},['Import from Excel/CSV']);im.addEventListener('click',()=>impNB(b));
+    br.appendChild(a);br.appendChild(im);card.appendChild(br);h.appendChild(card)})}
+addNB();
+function genNacha(){clr();try{
+  const f=nfVals;if(!nB.length)throw new Error('Add at least one batch before generating.');
+  const L=[];
+  L.push('101'+pL(dig(f.immDest),10,' ')+pL(dig(f.immOrig),10,' ')+pL(f.creationDate||ymd(),6,'0')+pL(f.creationTime||hm(),4,'0')+(f.idMod||'A').slice(0,1).toUpperCase()+'094101'+pR(f.destName,23)+pR(f.origName,23)+pR(f.refCode,8));
+  let fCnt=0,fHash=0,fDeb=0,fCred=0;
+  nB.forEach((b,bi)=>{
+    const v=b.vals;if(!b.recs.length)throw new Error('Batch '+(bi+1)+' has no recipients.');
+    const dfi=pL(dig(v.originDfi),8,'0');
+    const cid=dig(v.companyId)?('1'+pL(dig(v.companyId),9,'0')):pR(v.companyId,10);
+    const bn=pL(v.batchNumber||String(bi+1),7,'0');
+    L.push('5'+v.svc+pR(v.companyName,16)+pR(v.discData,20)+pR(cid,10)+pR(v.sec,3)+pR(v.entryDesc,10)+pR(v.descDate,6)+pL(v.effDate||ymd(),6,'0')+'   1'+dfi+bn);
+    let cnt=0,hash=0,deb=0,cred=0,seq=0;
+    b.recs.forEach(r=>{
+      if(!r.name||!r.account||!r.routing)throw new Error('Batch '+(bi+1)+': every recipient needs a Name, Routing number and Account number.');
+      seq++;const r9=rt9(r.routing),rd8=r9.slice(0,8);hash+=parseInt(rd8,10);
+      let tc=r.txn;if(!tc)tc=String({'Checking':22,'Savings':32,'General Ledger':42,'Loan':52}[r.acctType]||22);
+      const c=Math.round(parseFloat(String(r.amount||'0').replace(/[^0-9.\-]/g,'')||'0')*100)||0;
+      if(DEBITS.indexOf(tc)>=0)deb+=c;else cred+=c;
+      const has=!!(r.addenda&&r.addenda.trim());
+      const trace=dfi+pL(seq,7,'0');
+      L.push('6'+pL(tc,2,'0')+rd8+r9.slice(8,9)+pR(r.account,17)+pL(c,10,'0')+pR(r.idNum,15)+pR(r.name,22)+'  '+(has?'1':'0')+trace);cnt++;
+      if(has){const tx=r.addenda.trim();let n=0;for(let i=0;i<tx.length;i+=80){n++;L.push('705'+pR(tx.slice(i,i+80),80)+pL(n,4,'0')+trace.slice(-7));cnt++}}
+    });
+    L.push('8'+v.svc+pL(cnt,6,'0')+pL(String(hash).slice(-10),10,'0')+pL(deb,12,'0')+pL(cred,12,'0')+pR(cid,10)+pR('',25)+dfi+bn);
+    fCnt+=cnt;fHash+=hash;fDeb+=deb;fCred+=cred;
+  });
+  const blocks=Math.ceil((L.length+1)/10);
+  L.push('9'+pL(nB.length,6,'0')+pL(blocks,6,'0')+pL(fCnt,8,'0')+pL(String(fHash).slice(-10),10,'0')+pL(fDeb,12,'0')+pL(fCred,12,'0')+pR('',39));
+  while(L.length%10!==0)L.push('9'.repeat(94));
+  show(L,'NACHA — '+nB.length+' batch(es), '+L.length+' lines (94 chars/line)');
+  document.getElementById('fname').value='nacha_'+ymd()+'.ach';
+}catch(e){fail(e.message)}}
+
+/* ---- ACH ---- */
+function genAch(){
+  clr();
+  try{
+    const P=G.ach_p,R=G.ach_r;
+    if(!P.fields.length&&!R.fields.length)throw new Error('Paste and apply at least one field list (Payment and/or Recipient).');
+    const d=document.getElementById('ach-delim').value,type=document.getElementById('ach-type').value;
+    const pre=document.getElementById('ach-prefix').value==='1',inclT=document.getElementById('ach-incltype').value==='1';
+    const lines=[];
+    const rLine=r=>{const a=pre?['R']:[];R.fields.forEach(f=>a.push(r[f]||''));return joinF(a,d)};
+    const pRows=P.fields.length?P.rows.filter(r=>P.fields.some(f=>r[f])):[];
+    const rRows=R.fields.length?R.rows.filter(r=>R.fields.some(f=>r[f])):[];
+    if(pRows.length){
+      pRows.forEach((r,i)=>{
+        const a=pre?['P']:[];if(inclT)a.push(type);P.fields.forEach(f=>a.push(r[f]||''));lines.push(joinF(a,d));
+        rRows.filter(x=>String(x.__pay||'1').trim()===String(i+1)).forEach(x=>lines.push(rLine(x)));
+      });
+      const used=new Set(rRows.map(x=>String(x.__pay||'1').trim()));
+      const bad=[...used].filter(n=>!(parseInt(n,10)>=1&&parseInt(n,10)<=pRows.length));
+      if(bad.length)throw new Error('Some recipient rows point to a Payment # that does not exist: '+bad.join(', ')+'.');
+    } else {
+      rRows.forEach(x=>lines.push(rLine(x)));
+    }
+    if(!lines.length)throw new Error('Fill in at least one row.');
+    show(lines,'ACH User-Defined ('+type+') — '+lines.length+' line(s)');
+    document.getElementById('fname').value='achud_'+type.toLowerCase()+'_'+ymd()+'.txt';
+  }catch(e){fail(e.message)}
+}
+
+/* ---- Wire ---- */
+function genWire(){
+  clr();
+  try{
+    const W=G.wire;if(!W.fields.length)throw new Error('Paste and apply a field list first.');
+    const d=',',type=document.getElementById('wire-type').value;
+    const rows=W.rows.filter(r=>W.fields.some(f=>r[f]));
+    if(!rows.length)throw new Error('Fill in at least one payment row.');
+    if(type==='AT'&&rows.length>1)throw new Error('Only one Transfer (AT) row is allowed per file.');
+    const lines=[];
+    if(document.getElementById('wire-hdrrow').value==='1')lines.push(joinF(W.fields,d));
+    rows.forEach(r=>lines.push(joinF(W.fields.map(f=>r[f]||''),d)));
+    show(lines,'Wire User-Defined ('+type+') — '+rows.length+' payment row(s), no header/trailer record');
+    document.getElementById('fname').value='wire_'+type.toLowerCase()+'_'+ymd()+'.csv';
+  }catch(e){fail(e.message)}
+}
+</script>
+</body>
+</html>
